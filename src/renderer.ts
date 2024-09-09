@@ -1,4 +1,4 @@
-// https://github.com/mattbierner/vscode-docs-view/blob/master/src/renderer.ts
+// original file: https://github.com/mattbierner/vscode-docs-view/blob/master/src/renderer.ts
 /*
 MIT License
 
@@ -53,17 +53,9 @@ export class Renderer {
 		}
 	}
 
-	public async render(document: vscode.TextDocument, hovers: readonly vscode.Hover[]): Promise<string> {
-		const parts = (hovers)
-			.flatMap(hover => hover.contents)
-			.map(content => this.getMarkdown(content))
-			.filter(content => content.length > 0);
-
-		if (!parts.length) {
-			return '';
-		}
-
-		const markdown = parts.join('\n---\n');
+	public async render(markdown: string): Promise<string> {
+		const document = vscode.window.activeTextEditor?.document;
+		if (document === undefined) return "";
 
 		const highlight = await this._highlighter.getHighlighter(document);
 		const marked = new Marked({
@@ -74,73 +66,5 @@ export class Renderer {
 
 		const renderedMarkdown = await marked.parse(markdown, {});
 		return this._purify.sanitize(renderedMarkdown, { USE_PROFILES: { html: true } });
-	}
-
-	private getMarkdown(content: vscode.MarkedString | vscode.MarkdownString): string {
-		if (typeof content === 'string') {
-			return content;
-		} else if (content instanceof vscode.MarkdownString) {
-			return content.value;
-		} else {
-			const markdown = new vscode.MarkdownString();
-			markdown.appendCodeblock(content.value, content.language);
-			return markdown.value;
-		}
-	}
-
-	/**
-	 * @copyright Frantisek Frode 2024
-	 */
-	public async RenderSignature(document: vscode.TextDocument, signatures?: vscode.SignatureHelp): Promise<string> {
-		if (!signatures?.signatures?.length) return '';
-
-		signatures.signatures[signatures.activeSignature].activeParameter ??= signatures.activeParameter;
-		const parts = signatures.signatures.map(SignatureMD);
-
-		const markdown = parts.join('\n\n---\n\n---\n\n');
-
-		const highlight = await this._highlighter.getHighlighter(document);
-		const marked = new Marked({
-			renderer: {
-				code: (code: string, infostring: string | undefined, _escaped: boolean) => highlight(code, infostring ?? '')
-			}
-		});
-
-		const renderedMarkdown = await marked.parse(markdown, {});
-		return this._purify.sanitize(renderedMarkdown, { USE_PROFILES: { html: true } });
-	}
-}
-
-function SignatureMD(sig: vscode.SignatureInformation) {
-	let label: string;
-
-	if (sig.activeParameter !== undefined) {
-		let activeRange = sig.parameters[sig.activeParameter].label;
-		if (typeof(activeRange) === "string") {
-			const start = sig.label.indexOf(activeRange);
-			activeRange = [start, start + activeRange.length];
-		}
-
-		label = sig.label.substring(0, activeRange[0])
-		+ "<u>" + sig.label.substring(activeRange[0], activeRange[1]) + "</u>"
-		+ sig.label.substring(activeRange[1]);
-
-		return "**" + label + "**\n\n" 
-		+ (ToString(sig.parameters[sig.activeParameter].documentation) ?? "")
-		+ "\n\n---\n\n"
-		+ (ToString(sig.documentation) ?? "");
-	}
-	else {
-		label = sig.label;
-		return "**" + label + "**\n\n"
-		+ (ToString(sig.documentation) ?? "")
-	}
-}
-
-function ToString<T>(val: T) : Exclude<T, vscode.MarkdownString> | string {
-	if (val instanceof vscode.MarkdownString) {
-		return val.value;
-	} else {
-		return val as Exclude<T, vscode.MarkdownString>;
 	}
 }

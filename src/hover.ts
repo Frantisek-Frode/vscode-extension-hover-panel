@@ -1,98 +1,29 @@
 import * as vscode from "vscode"
-// import markdownit from "markdown-it"
-import { Renderer } from "./renderer";
+import { extractMarkdown, HTMLGenerator } from "./markdownView";
 
-export class HoverPanel implements vscode.WebviewViewProvider {
-	private _view?: vscode.WebviewView;
-	private readonly _renderer = new Renderer();
-	private readonly _disposables: vscode.Disposable[] = [];
-	public static viewType = "hover"
-	static instance?: HoverPanel
-	private _extensionUri;
-	// private _md = markdownit()
 
-	constructor(extUri: vscode.Uri)
-	{
-		this._extensionUri = extUri;
+export const GenerateHoversHTML : HTMLGenerator
+= async function (uri, pos, md2html) {
+	const hovers = await GetHovers(uri, pos);
+	const md = HoversMD(hovers);
+	return md2html(md);
+}
 
-		vscode.window.onDidChangeActiveTextEditor(() =>
-		{
-			this._update();
-		}, null, this._disposables);
+function GetHovers(uri: vscode.Uri, pos: vscode.Position) {
+	return vscode.commands.executeCommand<vscode.Hover[]>(
+		"vscode.executeHoverProvider", uri, pos,
+	);
+}
 
-		vscode.window.onDidChangeTextEditorSelection(() =>
-		{
-			this._update();
-		}, null, this._disposables);
+function HoversMD(hovers: readonly vscode.Hover[]): string {
+	const parts = (hovers)
+		.flatMap(hover => hover.contents)
+		.map(extractMarkdown)
+		.filter(content => content.length > 0);
 
-		this._renderer.needsRender(() =>
-		{
-			this._update();
-		}, undefined, this._disposables);
-
-		this._update();
+	if (!parts.length) {
+		return '';
 	}
 
-	dispose()
-	{
-		for (let d of this._disposables) {
-			d.dispose();
-		}
-	}
-
-	public resolveWebviewView(
-		webviewView: vscode.WebviewView,
-		context: vscode.WebviewViewResolveContext,
-		token: vscode.CancellationToken
-	): Thenable<void> | void
-	{
-		this._view = webviewView;
-		this._view.webview.options = {
-			localResourceRoots: [
-				vscode.Uri.joinPath(this._extensionUri, "media")
-			]
-		};
-	}
-
-	private _hovers(editor: vscode.TextEditor)
-	{
-		return vscode.commands.executeCommand<vscode.Hover[]>(
-			"vscode.executeHoverProvider",
-			editor.document.uri,
-			editor.selection.active
-		)
-	}
-
-	async _update()
-	{
-		let editor = vscode.window.activeTextEditor;
-		if (!this._view || !editor) return;
-		const hovers = await this._hovers(editor);
-
-		this._view.webview.html = this._buildHTML(
-			await this._renderer.render(editor.document, hovers)
-		);
-	}
-
-	_buildHTML(content: string | string[])
-	{
-		const styleUri = this._view?.webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'main.css'));
-
-		const start =
-		`<!DOCTYPE html>
-		<html lang="en">
-			<head>
-				<meta charset="UTF-8">
-				<meta name="viewport" content="width=device-width, initial-scale=1.0">
-				<link href="${styleUri}" rel="stylesheet">
-			</head>
-			<body><article id="main"/>`
-		const end = `</article></body></html>`
-
-		if (typeof content === "string") return start + content + end;
-
-		let total = start;
-		for (let part of content) total += part;
-		return total + end;
-	}
+	return parts.join('\n---\n');
 }

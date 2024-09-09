@@ -1,97 +1,53 @@
 import * as vscode from "vscode"
-import { Renderer } from "./renderer";
+import { extractMarkdown, HTMLGenerator } from "./markdownView";
 
-export class SignaturePanel implements vscode.WebviewViewProvider {
-	private _view?: vscode.WebviewView;
-	private readonly _renderer = new Renderer();
-	private readonly _disposables: vscode.Disposable[] = [];
-	public static viewType = "signature"
-	static instance?: SignaturePanel
-	private _extensionUri;
-	// private _md = markdownit()
 
-	constructor(extUri: vscode.Uri)
-	{
-		this._extensionUri = extUri;
+export const GenerateSignaturesHTML : HTMLGenerator
+= async function (uri, pos, md2html) {
+	const sigHelp = await GetHovers(uri, pos);
+	if (sigHelp === undefined) return "";
 
-		vscode.window.onDidChangeActiveTextEditor(() =>
-		{
-			this._update();
-		}, null, this._disposables);
+	const md = SignatureHelpMD(sigHelp);
+	return md2html(md);
+}
 
-		vscode.window.onDidChangeTextEditorSelection(() =>
-		{
-			this._update();
-		}, null, this._disposables);
+function GetHovers(uri: vscode.Uri, pos: vscode.Position) {
+	return vscode.commands.executeCommand<vscode.SignatureHelp | undefined>(
+		"vscode.executeSignatureHelpProvider", uri, pos
+	)
+}
 
-		this._renderer.needsRender(() =>
-		{
-			this._update();
-		}, undefined, this._disposables);
+function SignatureHelpMD(sigHelp: vscode.SignatureHelp): string {
+	if (!sigHelp?.signatures?.length) return '';
 
-		this._update();
-	}
+	sigHelp.signatures[sigHelp.activeSignature].activeParameter ??= sigHelp.activeParameter;
+	const parts = sigHelp.signatures.map(SingleSignatureMD);
 
-	dispose()
-	{
-		for (let d of this._disposables) {
-			d.dispose();
+	return parts.join('\n\n---\n\n---\n\n');
+}
+
+function SingleSignatureMD(sig: vscode.SignatureInformation): string {
+	let label: string;
+
+	if (sig.activeParameter !== undefined) {
+		let activeRange = sig.parameters[sig.activeParameter].label;
+		if (typeof(activeRange) === "string") {
+			const start = sig.label.indexOf(activeRange);
+			activeRange = [start, start + activeRange.length];
 		}
+
+		label = sig.label.substring(0, activeRange[0])
+		+ "<u>" + sig.label.substring(activeRange[0], activeRange[1]) + "</u>"
+		+ sig.label.substring(activeRange[1]);
+
+		return "**" + label + "**\n\n" 
+		+ extractMarkdown(sig.parameters[sig.activeParameter].documentation ?? "")
+		+ "\n\n---\n\n"
+		+ extractMarkdown(sig.documentation ?? "");
 	}
-
-	public resolveWebviewView(
-		webviewView: vscode.WebviewView,
-		context: vscode.WebviewViewResolveContext,
-		token: vscode.CancellationToken
-	): Thenable<void> | void
-	{
-		this._view = webviewView;
-		this._view.webview.options = {
-			localResourceRoots: [
-				vscode.Uri.joinPath(this._extensionUri, "media")
-			]
-		};
-	}
-
-	private _sigHelp(editor: vscode.TextEditor)
-	{
-		return vscode.commands.executeCommand<vscode.SignatureHelp | undefined>(
-			"vscode.executeSignatureHelpProvider",
-			editor.document.uri,
-			editor.selection.active
-		)
-	}
-
-	async _update()
-	{
-		let editor = vscode.window.activeTextEditor;
-		if (!this._view || !editor) return;
-		const signatures = await this._sigHelp(editor);
-
-		this._view.webview.html = this._buildHTML(
-			await this._renderer.RenderSignature(editor.document, signatures)
-		);
-	}
-
-	_buildHTML(content: string | string[])
-	{
-		const styleUri = this._view?.webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'main.css'));
-
-		const start =
-		`<!DOCTYPE html>
-		<html lang="en">
-			<head>
-				<meta charset="UTF-8">
-				<meta name="viewport" content="width=device-width, initial-scale=1.0">
-				<link href="${styleUri}" rel="stylesheet">
-			</head>
-			<body><article id="main"/>`
-		const end = `</article></body></html>`
-
-		if (typeof content === "string") return start + content + end;
-
-		let total = start;
-		for (let part of content) total += part;
-		return total + end;
+	else {
+		label = sig.label;
+		return "**" + label + "**\n\n"
+		+ extractMarkdown(sig.documentation ?? "")
 	}
 }
