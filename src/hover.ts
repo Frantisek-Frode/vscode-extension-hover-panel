@@ -3,10 +3,10 @@ import { extractMarkdown, HTMLGenerator } from "./markdownView";
 
 
 export const GenerateHoversHTML : HTMLGenerator
-= async function (uri, pos, md2html) {
+= async function (uri, pos, md2html, draw) {
 	const hovers = await GetHovers(uri, pos);
 	const md = HoversMD(hovers);
-	return md2html(md);
+	draw(await md2html(md));
 }
 
 function GetHovers(uri: vscode.Uri, pos: vscode.Position) {

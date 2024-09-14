@@ -3,12 +3,15 @@ import { extractMarkdown, HTMLGenerator } from "./markdownView";
 
 
 export const GenerateSignaturesHTML : HTMLGenerator
-= async function (uri, pos, md2html) {
+= async function (uri, pos, md2html, draw) {
 	const sigHelp = await GetHovers(uri, pos);
-	if (sigHelp === undefined) return "";
+	if (sigHelp === undefined) {
+		draw("");
+		return;
+	}
 
 	const md = SignatureHelpMD(sigHelp);
-	return md2html(md);
+	draw(await md2html(md));
 }
 
 function GetHovers(uri: vscode.Uri, pos: vscode.Position) {

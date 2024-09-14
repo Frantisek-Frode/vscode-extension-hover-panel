@@ -1,23 +1,28 @@
 import * as vscode from "vscode"
 import { Renderer } from "./renderer";
+import { Deferrer } from "./util";
 
 export type HTMLGenerator = (
 	uri: vscode.Uri,
 	position: vscode.Position,
-	md2html: (md: string) => Promise<string>
-) => Promise<string>
+	md2html: (md: string) => Promise<string>,
+	draw: (newContent: string | string[]) => void,
+) => Promise<void>
 
 export class MarkdownView implements vscode.WebviewViewProvider {
 	private _view?: vscode.WebviewView;
 	private readonly _renderer = new Renderer();
 	private readonly _disposables: vscode.Disposable[] = [];
 	private _extensionUri;
+	private _deferrer;
 
 	constructor(
 		extUri: vscode.Uri,
 		viewType: string,
 		private GenerateHtml: HTMLGenerator
 	) {
+		this._deferrer = new Deferrer(10);
+
 		this._extensionUri = extUri;
 
 		this._disposables.push(
@@ -68,12 +73,17 @@ export class MarkdownView implements vscode.WebviewViewProvider {
 		let editor = vscode.window.activeTextEditor;
 		if (!this._view || !editor) return;
 
-		this._view.webview.html = this._buildHTML(
-			await this.GenerateHtml(
-				editor.document.uri,
-				editor.selection.active,
-				this._renderer.render.bind(this._renderer) // javascript this
-			)
+		if (!await this._deferrer.ShouldProceed()) return;
+
+		await this.GenerateHtml(
+			editor.document.uri,
+			editor.selection.active,
+			this._renderer.render.bind(this._renderer), // javascript this
+			(newContent) =>
+			{
+				if (!this._view) return;
+				this._view.webview.html = this._buildHTML(newContent);
+			}
 		);
 	}
 
