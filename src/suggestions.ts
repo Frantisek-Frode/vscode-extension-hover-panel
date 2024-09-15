@@ -3,6 +3,8 @@ import { HTMLGenerator } from "./markdownView";
 
 type RankedCompletionList = { dist: number, item: vscode.CompletionItem, match: string }[];
 
+
+// #region Fetching
 let completionItemsCache: vscode.CompletionItem[] = [];
 function CacheDiffers(newCompl: vscode.CompletionItem[]) {
 	if (completionItemsCache.length !== newCompl.length) {
@@ -19,6 +21,12 @@ function CacheDiffers(newCompl: vscode.CompletionItem[]) {
 	}
 
 	return false;
+}
+
+function GetCompletions(uri: vscode.Uri, pos: vscode.Position) {
+	return vscode.commands.executeCommand<vscode.CompletionList>(
+		"vscode.executeCompletionItemProvider", uri, pos
+	);
 }
 
 export const GenerateCompletionsHTML : HTMLGenerator
@@ -71,26 +79,6 @@ async function SortAvailable(completions: vscode.CompletionItem[]) {
 	return CompletionsHTML(rankedCompletions);
 }
 
-function GetCompletions(uri: vscode.Uri, pos: vscode.Position) {
-	return vscode.commands.executeCommand<vscode.CompletionList>(
-		"vscode.executeCompletionItemProvider", uri, pos
-	);
-}
-
-function CompletionsHTML(completions: RankedCompletionList): string {
-	const labels = completions.map(ci => ci.item.label);
-	if (labels.length === 0) return '';
-
-	const parts = labels.map(label => {
-		if (typeof label === "string") {
-			return label;
-		} else {
-			return label.label;
-		}
-	})
-
-	return parts.join('\n<br/>\n');
-}
 
 // #region Ordering
 const append_cost = 1
@@ -170,4 +158,21 @@ function SimpleMatcher(ctx: string, compl: string) {
 	}
 
 	return true;
+}
+
+
+// #region Rendering
+function CompletionsHTML(completions: RankedCompletionList): string {
+	const labels = completions.map(ci => ci.item.label);
+	if (labels.length === 0) return '';
+
+	const parts = labels.map(label => {
+		if (typeof label === "string") {
+			return label;
+		} else {
+			return label.label;
+		}
+	})
+
+	return parts.join('\n<br/>\n');
 }
