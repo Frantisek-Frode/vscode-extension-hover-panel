@@ -53,8 +53,8 @@ async function SortAvailable(completions: vscode.CompletionItem[]) {
 	const wordRange = editor.document.getWordRangeAtPosition(editor.selection.active);
 	let word = "";
 	if (wordRange) {
-		wordRange.with(undefined, editor.selection.active);
-		word = editor.document.getText(wordRange);
+		const range = wordRange.with(undefined, editor.selection.active);
+		word = editor.document.getText(range);
 	}
 
 	if (completions.length * word.length > 10000) {
