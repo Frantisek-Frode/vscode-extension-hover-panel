@@ -73,3 +73,26 @@ ol {
 	padding-left: 20px;
 	margin: 8px;
 }
+
+
+div.suggestions > span {
+	padding: 0;
+	font-size: 14px;
+}
+
+span.suggestion-same {
+	color: var(--vscode-editorSuggestWidget-highlightForeground);
+	font-weight: bold;
+}
+
+span.suggestion-sim {
+	color: color-mix(in hsl,
+		var(--vscode-editorSuggestWidget-highlightForeground),
+		var(--vscode-editor-foreground)
+	);
+	font-weight: bold;
+}
+
+span.suggestion-repl {
+	color: var(--vscode-disabledForeground);
+}

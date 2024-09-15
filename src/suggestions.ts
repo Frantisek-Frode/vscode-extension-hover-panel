@@ -3,6 +3,12 @@ import { HTMLGenerator } from "./markdownView";
 
 type RankedCompletionList = { dist: number, item: vscode.CompletionItem, match: string }[];
 
+function LabelString(compl: vscode.CompletionItem) {
+	const label = compl.label;
+	if (typeof(label) === 'string') return label;
+	else return label.label;
+}
+
 
 // #region Fetching
 let completionItemsCache: vscode.CompletionItem[] = [];
@@ -12,12 +18,7 @@ function CacheDiffers(newCompl: vscode.CompletionItem[]) {
 	}
 
 	for (let i = 0; i < newCompl.length; i++) {
-		let item = completionItemsCache[i];
-		const oldLabel = typeof(item.label) === "string" ? item.label : item.label.label;
-		item = newCompl[i];
-		const newLabel = typeof(item.label) === "string" ? item.label : item.label.label;
-
-		if (oldLabel !== newLabel) return true;
+		if (LabelString(completionItemsCache[i]) !== LabelString(newCompl[i])) return true;
 	}
 
 	return false;
@@ -59,14 +60,12 @@ async function SortAvailable(completions: vscode.CompletionItem[]) {
 
 	if (completions.length * word.length > 10000) {
 		completions = completions.filter(item => {
-			const labelString = typeof (item.label) === "string" ? item.label : item.label.label;
-			return SimpleMatcher(word, labelString)
+			return SimpleMatcher(word, LabelString(item))
 		});
 	}
 
 	for (const item of completions) {
-		const labelString = typeof(item.label) === "string" ? item.label : item.label.label;
-		const dist = (new DistanceRecursor(word, labelString)).CachedCompute();
+		const dist = (new DistanceRecursor(word, LabelString(item))).CachedCompute();
 
 		rankedCompletions.push({
 			item: item,
@@ -161,18 +160,66 @@ function SimpleMatcher(ctx: string, compl: string) {
 }
 
 
+const render_threshold = 10;
+
 // #region Rendering
 function CompletionsHTML(completions: RankedCompletionList): string {
-	const labels = completions.map(ci => ci.item.label);
-	if (labels.length === 0) return '';
+	if (completions.length === 0) return '';
 
-	const parts = labels.map(label => {
-		if (typeof label === "string") {
-			return label;
+	const parts = completions
+		.filter(compl => {
+			let label = LabelString(compl.item);
+			if (label.length === 0) return false;
+			return compl.dist / label.length < render_threshold;
+		})
+		.map(SingleCompletionHTML);
+
+	return '<div class="suggestions">' + parts.join('\n<br/>\n') + "</div>";
+}
+
+function MatchCssClass(match: string) {
+	switch (match) {
+		case "=": return "suggestion-same";
+		case "~": return "suggestion-sim";
+		case "s": return "suggestion-sim";
+		case "r": return "suggestion-repl";
+		default: return "suggestion";
+	}
+}
+
+function SingleCompletionHTML(
+	compl: RankedCompletionList[number],
+): string {
+	let result = "";
+	const match = compl.match.replaceAll("d", "");
+
+	let label = LabelString(compl.item);
+
+	let currentClass: string | undefined = undefined;
+	let currentText = "";
+	let i = 0;
+	for (; i < label.length && i < match.length; i++) {
+		let cssClass = MatchCssClass(match[i]);
+		if (cssClass === currentClass) {
+			currentText += label[i];
 		} else {
-			return label.label;
-		}
-	})
+			if (currentClass) {
+				result += `<span class="${currentClass}">${currentText}</span>`;
+			} else {
+				result += `<span>${currentText}</span>`;
+			}
 
-	return parts.join('\n<br/>\n');
+			currentClass = cssClass;
+			currentText = label[i];
+		}
+	}
+
+	if (currentClass) {
+		result += `<span class="${currentClass}">${currentText}</span>`;
+		// result += `<span style="color: ${currentColor}; padding: 0">${currentText}</span>`;
+	} else {
+		result += `<span>${currentText}</span>`;
+	}
+
+	return result + `<span>${label.substring(i)}</span>`;
 }
